@@ -21,6 +21,8 @@ ser.write(frame_bytes)
 # the response is between 19 and 27 bytes long
 response = ser.read(27)
 
+print(f'response length : {len(response)}')
+
 
 # generate file name from time stamp AAAA-MM-DD_HH:MM:SS
 file_name = str(uuid.uuid1()) + '.bin'
