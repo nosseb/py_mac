@@ -1,0 +1,29 @@
+Registers to read during initialisation :
+#########################################
+
+1. System info
+- 001 : PROG_VERSION        Firmware version
+- 002 : MODE_REG            Actual operating mode
+- 014 : GEARF1              Gear ratio nominator
+- 015 : GEARF2              Gear ratio denominator
+
+2. Things that might cause problems when powering on
+- 003 : P_SOLL              Target position
+- 010 : P_IST               Actual position
+- 012 : V_IST               Actual velocity
+- 028 : MIN_P_IST           Minimum position
+- 029 : MAX_P_IST           Maximum position
+- 035 : ERR_STAT            Error status
+- 037 : STARTMODE           Start mode
+- 038 : P_HOME              Offset of home position
+- 042 : HOMEMODE            Wether the motor should search the home position after power on
+
+
+Registers to set during initialisation :
+########################################
+
+- 017 : I2TLIM              Safety limit for energy dissipated in the motor windings
+- 019 : UITLIMIT            Safety limit for energy disspated in internal power dump
+- 022 : FLWERRMAX           Maximum error from regulation goal
+- 026 : FNCERRMAX           Maximum error from ideal movement
+- 032 : ACC_EMERG           Maximum in case of emergency stop
