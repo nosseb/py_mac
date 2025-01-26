@@ -1,3 +1,5 @@
+import importlib.resources
+import json
 import serial
 
 class MAC50Motor:
@@ -9,10 +11,46 @@ class MAC50Motor:
         self.baud = 19200 # bits per second
         self.address = address # 0xff for broadcast, 0x00 for master
 
+        self.operating_modes = {
+            "passive": 0,
+            "velocity": 1,
+            "position": 2,
+            "gear position": 3,
+            "analogue torque": 4,
+            "analogue velocity": 5,
+            "analogue velocity gear": 6,
+            "manual current": 7,
+            "step response test": 8,
+            "internal test": 9,
+            "brake": 10,
+            "stop": 11,
+            "torque based zero search": 12,
+            "forward/only zero search": 13,
+            "forward+backward zero search": 14,
+            "safe mode": 15,
+            "analogue velocity with dead band": 16,
+            "velocity limited analogue torque": 17,
+            "analogue gear": 18,
+            "coil": 19,
+            "analogue bi-position": 20,
+            "analogue to position": 21,
+            "internal test 2": 22,
+            "internal test 3": 23,
+            "gear follow": 24,
+            "IHOME": 25,
+        }
+
+        # Load the registers from the json file in resources
+        with importlib.resources.open_text("py_mac", "registers.json") as file:
+            self.registers = json.load(file)
+
         try:
             self.serial = serial.Serial(self.serial_path, self.baud, timeout=0.1)
         except serial.SerialException:
             raise ValueError("Invalid serial path")
+
+    def __del__(self):
+        self.serial.close()
 
     def read(self, reg_num: int):
         if reg_num < 0 or reg_num > 255:
@@ -64,3 +102,22 @@ class MAC50Motor:
         if response != expected:
             raise ValueError("Invalid response")
 
+    def read_register(self, register_name: str):
+        if register_name not in self.registers:
+            raise ValueError("Invalid register name")
+
+        return self.read(self.registers[register_name]["nb"])[0:self.registers[register_name]["size"]]
+
+    def get_mode(self):
+        return self.read_register("mode")[0]
+
+    def get_mode_name(self):
+        mode = self.get_mode()
+        return [k for k, v in self.operating_modes.items() if v == mode][0]
+
+    def set_mode(self, mode: str|bytes|int):
+        if isinstance(mode, str):
+            mode = self.operating_modes[mode]
+        if mode < 0 or mode > 255:
+            raise ValueError("Invalid mode")
+        self.write(0, bytes([mode]))
