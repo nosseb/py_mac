@@ -4,6 +4,12 @@ import serial
 
 class MAC50Motor:
     def __init__(self, serial_path: str, address: int):
+        """
+        Create a new MAC50Motor object.
+
+        :param serial_path: Path to the serial port
+        :param address: Address of the motor
+        """
         if address < 0 or address > 255:
             raise ValueError("Invalid address")
 
@@ -44,15 +50,48 @@ class MAC50Motor:
         with importlib.resources.open_text("py_mac", "registers.json") as file:
             self.registers = json.load(file)
 
+        # Open the serial port
         try:
             self.serial = serial.Serial(self.serial_path, self.baud, timeout=0.1)
         except serial.SerialException:
             raise ValueError("Invalid serial path")
 
+        # Update the object tp match the motor
+        self.status = {
+            "operating mode": self.get_mode_name(),
+            "max velocity": int.from_bytes(self.read_register("V_SOLL"), byteorder="little"),
+            "max acceleration": int.from_bytes(self.read_register("A_SOLL"), byteorder="little"),
+            "max_torque": int.from_bytes(self.read_register("T_SOLL"), byteorder="little"),
+            "gear ratio nomitor": int.from_bytes(self.read_register("GEARF1"), byteorder="little"),
+            "gear ratio denominator": int.from_bytes(self.read_register("GEARF2"), byteorder="little"),
+            "max winding energy": int.from_bytes(self.read_register("I2TLIM"), byteorder="little"),
+            "max dumped energy": int.from_bytes(self.read_register("UITLIM"), byteorder="little"),
+            "max position error": int.from_bytes(self.read_register("FLWERRMAX"), byteorder="little"),
+            "max velocity error": int.from_bytes(self.read_register("FNCERRMAX"), byteorder="little"),
+            "min position": int.from_bytes(self.read_register("MIN_P_IST"), byteorder="little", signed=True),
+            "max position": int.from_bytes(self.read_register("MAX_P_IST"), byteorder="little", signed=True),
+            "emergency deceleration": int.from_bytes(self.read_register("ACC_EMERG"), byteorder="little"),
+            "starting mode": int.from_bytes(self.read_register("STARTMODE"), byteorder="little"),
+            "home position": int.from_bytes(self.read_register("P_HOME"), byteorder="little", signed=True),
+            "homing velocity": int.from_bytes(self.read_register("V_HOME"), byteorder="little"),
+            "homing mode": self.read_register("HOME_MODE")[1],
+            "min supply voltage": int.from_bytes(self.read_register("MIN_U_SUP"), byteorder="little"),
+            "motor type": self.read_register("MOTORTYPE")[1],
+            "serial number": int.from_bytes(self.read_register("SERIAL"), byteorder="little"),
+            "address": int.from_bytes(self.read_register("MYADDR"), byteorder="little"),
+            "hardware version": int.from_bytes(self.read_register("HWVERSION"), byteorder="little"),
+        }
+
     def __del__(self):
         self.serial.close()
 
-    def read(self, reg_num: int):
+    def read(self, reg_num: int)->bytes:
+        """
+        Read data from the motor (low-level function).
+
+        :param reg_num: number of the first register to be read
+        :return: data returned by the motor, little-endian (least significant byte first), typically 8 bytes
+        """
         if reg_num < 0 or reg_num > 255:
             raise ValueError("Invalid register number")
 
@@ -83,7 +122,12 @@ class MAC50Motor:
 
         return data
 
-    def write(self, reg_num: int, data: bytes):
+    def write(self, reg_num: int, data: bytes)->None:
+        """
+        Write data to a register on the motor (low-level function).
+        :param reg_num: number of the register
+        :param data: data to be written, little-endian (least significant byte first)
+        """
         if reg_num < 0 or reg_num > 255:
             raise ValueError("Invalid register number")
         if len(data) % 2 != 0:
@@ -102,22 +146,96 @@ class MAC50Motor:
         if response != expected:
             raise ValueError("Invalid response")
 
-    def read_register(self, register_name: str):
-        if register_name not in self.registers:
-            raise ValueError("Invalid register name")
+    def read_register(self, register: str|int)->bytes:
+        """
+        Read a register from the motor (high-level function).
+        :param register: Name or number of the register
+        :return: data returned by the motor, little-endian (least significant byte first), cropped to the size of the register
+        """
+        if isinstance(register, str):
+            if register not in self.registers:
+                raise ValueError("Invalid register name")
+        if isinstance(register, int):
+            if register < 0 or register > 255:
+                raise ValueError("Invalid register number")
+            register = [k for k, v in self.registers.items() if v["nb"] == register][0]
 
-        return self.read(self.registers[register_name]["nb"])[0:self.registers[register_name]["size"]]
+        return self.read(self.registers[register]["nb"])[0:self.registers[register]["size"]]
 
-    def get_mode(self):
-        return self.read_register("mode")[0]
+    def write_register(self, register: str|int, data: bytes|int)->None:
+        """
+        Write a register to the motor (high-level function).
+        :param register: Name or number of the register
+        :param data: data to be written. If int, it will be converted to bytes to match the size of the register. If bytes, it must have the same size as the register.
+        """
+        if isinstance(register, str):
+            if register not in self.registers:
+                raise ValueError("Invalid register name")
+            register = self.registers[register]["nb"]
+        if register < 0 or register > 255:
+            raise ValueError("Invalid register number")
 
-    def get_mode_name(self):
-        mode = self.get_mode()
-        return [k for k, v in self.operating_modes.items() if v == mode][0]
+        if isinstance(data, int):
+            data = data.to_bytes(self.registers[register]["size"], byteorder="little")
+        if len(data) != self.registers[register]["size"]:
+            raise ValueError("Invalid data size")
 
-    def set_mode(self, mode: str|bytes|int):
+        self.write(register, data)
+
+    def get_mode_id(self)->int:
+        """
+        Get the operating mode of the motor.
+        :return: id of the current operating mode
+        """
+        mode_id = int.from_bytes(self.read_register("MODE_REG"), byteorder="little")
+
+        # update the object to match the motor
+        self.status["operating mode"] = [k for k, v in self.operating_modes.items() if v == mode_id][0]
+
+        return mode_id
+
+    def get_mode_name(self)->str:
+        """
+        Get the name of the operating mode of the motor.
+        :return: name of the current operating mode
+        """
+        self.get_mode_id()
+
+        # status["operating mode"] is already updated, so we can return it
+        return self.status["operating mode"]
+
+    def set_mode(self, mode: str|bytes|int)->None:
+        """
+        Set the operating mode of the motor.
+        :param mode: name, id or bytes of the mode
+        """
         if isinstance(mode, str):
             mode = self.operating_modes[mode]
+        if isinstance(mode, bytes):
+            mode = int.from_bytes(mode, byteorder="little")
         if mode < 0 or mode > 255:
             raise ValueError("Invalid mode")
-        self.write(0, bytes([mode]))
+
+        self.write_register("MODE_REG", mode)
+
+        # update the object to match the motor
+        self.status["operating mode"] = [k for k, v in self.operating_modes.items() if v == mode][0]
+
+    def get_position(self)->int:
+        """
+        Get the current position of the motor.
+        :return: current position
+        """
+        return int.from_bytes(self.read_register("P_IST"), byteorder="little", signed=True)
+
+    def set_target_position(self, position: int, ignore_mode:bool=False)->None:
+        """
+        Set the target position of the motor.
+        :param position: target position
+        :param ignore_mode: if True, the function will not check if the motor is in position mode
+        """
+        # check that the motor is in position mode
+        if not ignore_mode and self.status["operating mode"] != "position":
+            raise ValueError("Motor must be in position mode")
+
+        self.write_register("P_SOLL", position)

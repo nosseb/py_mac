@@ -180,7 +180,7 @@
         "MacTalk": null,
         "range": null,
         "unit": null,
-        "description": null
+        "description": "Maximum acceleration during emergency stop."
     },
     "INPOSWIN": {
         "nb": 33,
