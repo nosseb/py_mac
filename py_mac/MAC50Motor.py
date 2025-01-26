@@ -1,7 +1,36 @@
+from enum import Enum
 import importlib.resources
 import json
 import serial
 import threading
+
+class OperatingMode(Enum):
+    PASSIVE = 0
+    VELOCITY = 1
+    POSITION = 2
+    GEAR_POSITION = 3
+    ANALOGUE_TORQUE = 4
+    ANALOGUE_VELOCITY = 5
+    ANALOGUE_VELOCITY_GEAR = 6
+    MANUAL_CURRENT = 7
+    STEP_RESPONSE_TEST = 8
+    INTERNAL_TEST = 9
+    BRAKE = 10
+    STOP = 11
+    TORQUE_BASED_ZERO_SEARCH = 12
+    FORWARD_ONLY_ZERO_SEARCH = 13
+    FORWARD_BACKWARD_ZERO_SEARCH = 14
+    SAFE_MODE = 15
+    ANALOGUE_VELOCITY_WITH_DEAD_BAND = 16
+    VELOCITY_LIMITED_ANALOGUE_TORQUE = 17
+    ANALOGUE_GEAR = 18
+    COIL = 19
+    ANALOGUE_BI_POSITION = 20
+    ANALOGUE_TO_POSITION = 21
+    INTERNAL_TEST_2 = 22
+    INTERNAL_TEST_3 = 23
+    GEAR_FOLLOW = 24
+    IHOME = 25
 
 class MAC50Motor:
     def __init__(self, serial_path: str, address: int):
@@ -17,35 +46,6 @@ class MAC50Motor:
         self.serial_path = serial_path
         self.baud = 19200 # bits per second
         self.address = address # 0xff for broadcast, 0x00 for master
-
-        self.operating_modes = {
-            "passive": 0,
-            "velocity": 1,
-            "position": 2,
-            "gear position": 3,
-            "analogue torque": 4,
-            "analogue velocity": 5,
-            "analogue velocity gear": 6,
-            "manual current": 7,
-            "step response test": 8,
-            "internal test": 9,
-            "brake": 10,
-            "stop": 11,
-            "torque based zero search": 12,
-            "forward/only zero search": 13,
-            "forward+backward zero search": 14,
-            "safe mode": 15,
-            "analogue velocity with dead band": 16,
-            "velocity limited analogue torque": 17,
-            "analogue gear": 18,
-            "coil": 19,
-            "analogue bi-position": 20,
-            "analogue to position": 21,
-            "internal test 2": 22,
-            "internal test 3": 23,
-            "gear follow": 24,
-            "IHOME": 25,
-        }
 
         # Load the registers from the json file in resources
         with importlib.resources.open_text("py_mac", "registers.json") as file:
@@ -195,50 +195,42 @@ class MAC50Motor:
 
         self.write(register, data)
 
-    def get_mode_id(self)->int:
+    def get_mode(self)->OperatingMode:
         """
         Get the operating mode of the motor.
-        :return: id of the current operating mode
+        :return: current operating mode
         """
         self.status_lock.acquire()
 
-        mode_id = int.from_bytes(self.read_register("MODE_REG"), byteorder="little")
+        mode = OperatingMode(int.from_bytes(self.read_register("MODE_REG"), byteorder="little"))
 
         # update the object to match the motor
-        self.status["operating mode"] = [k for k, v in self.operating_modes.items() if v == mode_id][0]
+        self.status["operating mode"] = mode
 
         self.status_lock.release()
 
-        return mode_id
+        return mode
 
-    def get_mode_name(self)->str:
-        """
-        Get the name of the operating mode of the motor.
-        :return: name of the current operating mode
-        """
-        self.get_mode_id()
-
-        # status["operating mode"] is already updated, so we can return it
-        return self.status["operating mode"]
-
-    def set_mode(self, mode: str|bytes|int)->None:
+    def set_mode(self, mode: str|bytes|int|OperatingMode)->None:
         """
         Set the operating mode of the motor.
-        :param mode: name, id or bytes of the mode
+        :param mode: name, id, bytes or OperatingMode object
         """
         if isinstance(mode, str):
-            mode = self.operating_modes[mode]
+            mode = OperatingMode[mode.upper()]
         if isinstance(mode, bytes):
-            mode = int.from_bytes(mode, byteorder="little")
-        if mode < 0 or mode > 255:
+            mode = OperatingMode(int.from_bytes(mode, byteorder="little"))
+        if isinstance(mode, int):
+            mode = OperatingMode(mode)
+        if not isinstance(mode, OperatingMode):
             raise ValueError("Invalid mode")
 
         self.status_lock.acquire()
 
-        self.write_register("MODE_REG", mode)
+        self.write_register("MODE_REG", mode.value)
 
         # update the object to match the motor
-        self.status["operating mode"] = [k for k, v in self.operating_modes.items() if v == mode][0]
+        self.status["operating mode"] = mode
 
         self.status_lock.release()
 
@@ -258,7 +250,7 @@ class MAC50Motor:
         self.status_lock.acquire()
 
         # check that the motor is in position mode
-        if not ignore_mode and self.status["operating mode"] != "position":
+        if not ignore_mode and self.status["operating mode"] != OperatingMode.POSITION:
             raise ValueError("Motor must be in position mode")
 
         self.write_register("P_SOLL", position)
