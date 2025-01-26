@@ -1,6 +1,7 @@
 import importlib.resources
 import json
 import serial
+import threading
 
 class MAC50Motor:
     def __init__(self, serial_path: str, address: int):
@@ -56,9 +57,13 @@ class MAC50Motor:
         except serial.SerialException:
             raise ValueError("Invalid serial path")
 
+        self.serial_lock = threading.Lock()
+        self.status_lock = threading.Lock()
+
         # Update the object tp match the motor
+        self.status_lock.acquire()
         self.status = {
-            "operating mode": self.get_mode_name(),
+            "operating mode": "", # Cant be set here since get_mode_* requires self.status to exist
             "max velocity": int.from_bytes(self.read_register("V_SOLL"), byteorder="little"),
             "max acceleration": int.from_bytes(self.read_register("A_SOLL"), byteorder="little"),
             "max_torque": int.from_bytes(self.read_register("T_SOLL"), byteorder="little"),
@@ -74,13 +79,16 @@ class MAC50Motor:
             "starting mode": int.from_bytes(self.read_register("STARTMODE"), byteorder="little"),
             "home position": int.from_bytes(self.read_register("P_HOME"), byteorder="little", signed=True),
             "homing velocity": int.from_bytes(self.read_register("V_HOME"), byteorder="little"),
-            "homing mode": self.read_register("HOME_MODE")[1],
+            "homing mode": int.from_bytes(self.read_register("HOME_MODE"), byteorder="little"),
             "min supply voltage": int.from_bytes(self.read_register("MIN_U_SUP"), byteorder="little"),
-            "motor type": self.read_register("MOTORTYPE")[1],
+            "motor type": int.from_bytes(self.read_register("MOTORTYPE"), byteorder="little"),
             "serial number": int.from_bytes(self.read_register("SERIAL"), byteorder="little"),
             "address": int.from_bytes(self.read_register("MYADDR"), byteorder="little"),
             "hardware version": int.from_bytes(self.read_register("HWVERSION"), byteorder="little"),
         }
+        self.status_lock.release()
+
+        self.get_mode_id()
 
     def __del__(self):
         self.serial.close()
@@ -96,8 +104,11 @@ class MAC50Motor:
             raise ValueError("Invalid register number")
 
         message = [0x50, 0x50, 0x50, self.address, 0xff ^ self.address, reg_num, 0xff ^ reg_num, 0xaa, 0xaa]
+
+        self.serial_lock.acquire()
         self.serial.write(bytes(message))
         response = self.serial.read(19)
+        self.serial_lock.release()
 
         expected      = [0x52, 0x52, 0x52, 0x00, 0xff, reg_num, 0xff ^ reg_num, 0x04, 0xfb,  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xaa, 0xaa]
         frame_mask    = [0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff]
@@ -139,8 +150,10 @@ class MAC50Motor:
         data_with_complement = [b for pair in zip(data, complement) for b in pair]
         message = [0x52, 0x52, 0x52, self.address, 0xff ^ self.address, reg_num, 0xff ^ reg_num, len(data), 0xff ^ len(data)] + data_with_complement + [0xaa, 0xaa]
 
+        self.serial_lock.acquire()
         self.serial.write(bytes(message))
         response = self.serial.read(3)
+        self.serial_lock.release()
 
         expected = [0x11, 0x11, 0x11]
         if response != expected:
@@ -187,10 +200,14 @@ class MAC50Motor:
         Get the operating mode of the motor.
         :return: id of the current operating mode
         """
+        self.status_lock.acquire()
+
         mode_id = int.from_bytes(self.read_register("MODE_REG"), byteorder="little")
 
         # update the object to match the motor
         self.status["operating mode"] = [k for k, v in self.operating_modes.items() if v == mode_id][0]
+
+        self.status_lock.release()
 
         return mode_id
 
@@ -216,10 +233,14 @@ class MAC50Motor:
         if mode < 0 or mode > 255:
             raise ValueError("Invalid mode")
 
+        self.status_lock.acquire()
+
         self.write_register("MODE_REG", mode)
 
         # update the object to match the motor
         self.status["operating mode"] = [k for k, v in self.operating_modes.items() if v == mode][0]
+
+        self.status_lock.release()
 
     def get_position(self)->int:
         """
@@ -234,8 +255,12 @@ class MAC50Motor:
         :param position: target position
         :param ignore_mode: if True, the function will not check if the motor is in position mode
         """
+        self.status_lock.acquire()
+
         # check that the motor is in position mode
         if not ignore_mode and self.status["operating mode"] != "position":
             raise ValueError("Motor must be in position mode")
 
         self.write_register("P_SOLL", position)
+
+        self.status_lock.release()
