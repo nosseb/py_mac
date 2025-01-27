@@ -220,7 +220,7 @@
         "MacTalk": null,
         "range": null,
         "unit": null,
-        "description": null
+        "description": "Mode in which the motor will start after power on\nand HOME_MODE"
     },
     "P_HOME": {
         "nb": 38,
