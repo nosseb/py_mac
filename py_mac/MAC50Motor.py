@@ -57,12 +57,14 @@ class MAC50Motor:
         except serial.SerialException:
             raise ValueError("Invalid serial path")
 
+        self.config_lock = Lock()
         self.serial_lock = Lock()
         self.status_lock = Lock()
 
         # Update the object tp match the motor
+        self.config = {}
         self.status = {}
-        self.refresh_satus()
+        self.refresh_config()
 
     def __del__(self):
         self.serial.close()
@@ -194,26 +196,28 @@ class MAC50Motor:
         if not isinstance(mode, OperatingMode):
             raise ValueError("Invalid mode")
 
-        if mode == self.status["operating mode"]:
-            return
-
-        if mode == OperatingMode.POSITION and (self.status["min position"] != 0 or self.status["max position"] != 0):
-            position = self.get_position()
-            if position < self.status["min position"] or position > self.status["max position"]:
-                raise ValueError("Position out of bounds")
-
         with self.status_lock:
-            self.write_register("MODE_REG", mode.value)
+            if mode == self.status["operating mode"]:
+                return
 
-            # update the object to match the motor
-            self.status["operating mode"] = mode
+            with self.config_lock:
+                if mode == OperatingMode.POSITION and (self.config["min position"] != 0 or self.config["max position"] != 0):
+                    position = self.get_position()
+                    if position < self.config["min position"] or position > self.config["max position"]:
+                        raise ValueError("Position out of bounds")
+
+                self.write_register("MODE_REG", mode.value)
+                self.status["operating mode"] = mode
 
     def get_position(self)->int:
         """
         Get the current position of the motor.
         :return: current position
         """
-        return int.from_bytes(self.read_register("P_IST"), byteorder="little", signed=True)
+        with self.status_lock:
+            pos = int.from_bytes(self.read_register("P_IST"), byteorder="little", signed=True)
+            self.status["actual position"] = pos
+        return pos
 
     def set_target_position(self, position: int, ignore_mode:bool=False)->None:
         """
@@ -221,20 +225,21 @@ class MAC50Motor:
         :param position: target position
         :param ignore_mode: if True, the function will not check if the motor is in position mode
         """
-        with self.status_lock:
+        with self.config_lock:
             # check that the motor is in position mode
-            if not ignore_mode and self.status["operating mode"] != OperatingMode.POSITION:
+            if not ignore_mode and self.config["operating mode"] != OperatingMode.POSITION:
                 raise ValueError("Motor must be in position mode")
 
-            self.write_register("P_SOLL", position)
+            with self.status_lock:
+                self.write_register("P_SOLL", position)
+                self.status["target position"] = position
 
-    def refresh_satus(self)->None:
+    def refresh_config(self)->None:
         """"
         Refresh the status of the motor.
         """
-        with self.status_lock:
-            self.status = {
-                "operating mode": OperatingMode(int.from_bytes(self.read_register("MODE_REG"), byteorder="little")),
+        with self.config_lock:
+            self.config = {
                 "max velocity": int.from_bytes(self.read_register("V_SOLL"), byteorder="little"),
                 "max acceleration": int.from_bytes(self.read_register("A_SOLL"), byteorder="little"),
                 "max_torque": int.from_bytes(self.read_register("T_SOLL"), byteorder="little"),
@@ -242,8 +247,8 @@ class MAC50Motor:
                 "gear ratio denominator": int.from_bytes(self.read_register("GEARF2"), byteorder="little"),
                 "max winding energy": int.from_bytes(self.read_register("I2TLIM"), byteorder="little"),
                 "max dumped energy": int.from_bytes(self.read_register("UITLIM"), byteorder="little"),
-                "max position error": int.from_bytes(self.read_register("FLWERRMAX"), byteorder="little"),
-                "max velocity error": int.from_bytes(self.read_register("FNCERRMAX"), byteorder="little"),
+                "max regulation error": int.from_bytes(self.read_register("FLWERRMAX"), byteorder="little"),
+                "max movement error": int.from_bytes(self.read_register("FNCERRMAX"), byteorder="little"),
                 "min position": int.from_bytes(self.read_register("MIN_P_IST"), byteorder="little", signed=True),
                 "max position": int.from_bytes(self.read_register("MAX_P_IST"), byteorder="little", signed=True),
                 "emergency deceleration": int.from_bytes(self.read_register("ACC_EMERG"), byteorder="little"),
@@ -256,4 +261,24 @@ class MAC50Motor:
                 "serial number": int.from_bytes(self.read_register("SERIAL"), byteorder="little"),
                 "address": int.from_bytes(self.read_register("MYADDR"), byteorder="little"),
                 "hardware version": int.from_bytes(self.read_register("HWVERSION"), byteorder="little"),
+            }
+
+    def refresh_status(self)->None:
+        """"
+        Refresh the status of the motor.
+        """
+        with self.status_lock:
+            self.status = {
+                "operating mode": OperatingMode(int.from_bytes(self.read_register("MODE_REG"), byteorder="little")),
+                "target position": int.from_bytes(self.read_register("P_SOLL"), byteorder="little"),
+                "actual position": int.from_bytes(self.read_register("P_IST"), byteorder="little", signed=True),
+                "actual velocity": int.from_bytes(self.read_register("V_IST"), byteorder="little", signed=True),
+                "load factor": int.from_bytes(self.read_register("KVOUT"), byteorder="little"),
+                "winding energy": int.from_bytes(self.read_register("I2T"), byteorder="little"),
+                "dumped energy": int.from_bytes(self.read_register("UIT"), byteorder="little"),
+                "regulation error": int.from_bytes(self.read_register("FLWERR"), byteorder="little"),
+                "movement error": int.from_bytes(self.read_register("FNCERR"), byteorder="little"),
+                "error": int.from_bytes(self.read_register("ERR_STAT"), byteorder="little"),
+                "control": int.from_bytes(self.read_register("CNTRL_BITS"), byteorder="little"),
+                "supply voltage": int.from_bytes(self.read_register("U_SUPPLY"), byteorder="little"),
             }
