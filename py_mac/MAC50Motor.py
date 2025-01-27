@@ -2,7 +2,7 @@ from enum import Enum
 import importlib.resources
 import json
 import serial
-import threading
+from threading import Lock
 
 class OperatingMode(Enum):
     PASSIVE = 0
@@ -57,8 +57,8 @@ class MAC50Motor:
         except serial.SerialException:
             raise ValueError("Invalid serial path")
 
-        self.serial_lock = threading.Lock()
-        self.status_lock = threading.Lock()
+        self.serial_lock = Lock()
+        self.status_lock = Lock()
 
         # Update the object tp match the motor
         self.status_lock.acquire()
