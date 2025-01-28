@@ -65,6 +65,7 @@ class MAC50Motor:
         self.config = {}
         self.status = {}
         self.refresh_config()
+        self.refresh_status()
 
     def __del__(self):
         self.serial.close()
@@ -132,7 +133,7 @@ class MAC50Motor:
             self.serial.write(bytes(message))
             response = self.serial.read(3)
 
-        expected = [0x11, 0x11, 0x11]
+        expected = bytes([0x11, 0x11, 0x11])
         if response != expected:
             raise ValueError("Invalid response")
 
@@ -164,10 +165,12 @@ class MAC50Motor:
             register = self.registers[register]["nb"]
         if register < 0 or register > 255:
             raise ValueError("Invalid register number")
+        
+        register_name = [k for k, v in self.registers.items() if v["nb"] == register][0]
 
         if isinstance(data, int):
-            data = data.to_bytes(self.registers[register]["size"], byteorder="little")
-        if len(data) != self.registers[register]["size"]:
+            data = data.to_bytes(self.registers[register_name]["size"], byteorder="little")
+        if len(data) != self.registers[register_name]["size"]:
             raise ValueError("Invalid data size")
 
         self.write(register, data)
@@ -230,7 +233,7 @@ class MAC50Motor:
         """
         with self.config_lock:
             # check that the motor is in position mode
-            if not ignore_mode and self.config["operating mode"] != OperatingMode.POSITION:
+            if not ignore_mode and self.status["operating mode"] != OperatingMode.POSITION:
                 raise ValueError("Motor must be in position mode")
 
             with self.status_lock:
