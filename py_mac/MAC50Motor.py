@@ -78,10 +78,12 @@ class MAC50Motor:
         """
         if reg_num < 0 or reg_num > 255:
             raise ValueError("Invalid register number")
-
+        
         message = [0x50, 0x50, 0x50, self.address, 0xff ^ self.address, reg_num, 0xff ^ reg_num, 0xaa, 0xaa]
 
         with self.serial_lock:
+            self.serial.reset_input_buffer()
+            self.serial.reset_output_buffer()
             self.serial.write(bytes(message))
             response = self.serial.read(19)
 
@@ -90,12 +92,13 @@ class MAC50Motor:
         address_mask  = [0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
         register_mask = [0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
 
-        if all([(r & fm) == (e & fm) for r, fm, e in zip(response, frame_mask, expected)]):
+        print(f"expected frame: {' '.join(f'{byte:02x}' for byte in expected)}")
+        if not all([(r & fm) == (e & fm) for r, fm, e in zip(response, frame_mask, expected)]):
             raise ValueError("Invalid frame")
-        if all([(r & am) == (e & am) for r, am, e in zip(response, address_mask, expected)]):
+        if not all([(r & am) == (e & am) for r, am, e in zip(response, address_mask, expected)]):
             # TODO: if invalid address, try to read again
             raise ValueError("Invalid address")
-        if all([(r & rm) == (e & rm) for r, rm, e in zip(response, register_mask, expected)]):
+        if not all([(r & rm) == (e & rm) for r, rm, e in zip(response, register_mask, expected)]):
             raise ValueError("Invalid register")
 
         # split the response between the data and the complement
