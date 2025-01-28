@@ -258,10 +258,10 @@ class MAC50Motor:
                 "starting mode": OperatingMode(int.from_bytes(self.read_register("STARTMODE"), byteorder="little")),
                 "home position": int.from_bytes(self.read_register("P_HOME"), byteorder="little", signed=True),
                 "homing velocity": int.from_bytes(self.read_register("V_HOME"), byteorder="little"),
-                "homing mode": int.from_bytes(self.read_register("HOME_MODE"), byteorder="little"),
+                "homing mode": int.from_bytes(self.read_register("HOMEMODE"), byteorder="little"),
                 "min supply voltage": int.from_bytes(self.read_register("MIN_U_SUP"), byteorder="little"),
                 "motor type": int.from_bytes(self.read_register("MOTORTYPE"), byteorder="little"),
-                "serial number": int.from_bytes(self.read_register("SERIAL"), byteorder="little"),
+                "serial number": int.from_bytes(self.read_register("SERIALNUMBER"), byteorder="little"),
                 "address": int.from_bytes(self.read_register("MYADDR"), byteorder="little"),
                 "hardware version": int.from_bytes(self.read_register("HWVERSION"), byteorder="little"),
             }
