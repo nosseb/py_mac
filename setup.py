@@ -8,7 +8,7 @@ setup(
     packages=find_packages(exclude=['test']),
     include_package_data=True,
     package_data={
-        "py_mac": ['resource/registers.json'],
+        "py_mac": ['registers.json'],
     },
     data_files=[
         ('share/ament_index/resource_index/packages',
