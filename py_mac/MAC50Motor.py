@@ -92,7 +92,6 @@ class MAC50Motor:
         address_mask  = [0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
         register_mask = [0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
 
-        print(f"expected frame: {' '.join(f'{byte:02x}' for byte in expected)}")
         if not all([(r & fm) == (e & fm) for r, fm, e in zip(response, frame_mask, expected)]):
             raise ValueError("Invalid frame")
         if not all([(r & am) == (e & am) for r, am, e in zip(response, address_mask, expected)]):
@@ -105,7 +104,8 @@ class MAC50Motor:
         data_full = response[9:17]
         data = data_full[0::2]
         complement = data_full[1::2]
-        if [0xff ^ b for b in data] != complement:
+        complement_computed = bytes([0xff ^b for b in data])
+        if complement != complement_computed:
             # TODO: if invalid complement, try to read again
             raise ValueError("Invalid complement")
 
