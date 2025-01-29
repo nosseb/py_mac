@@ -3,6 +3,7 @@ import importlib.resources
 import json
 import serial
 from threading import Lock
+from typing import Union
 
 class OperatingMode(Enum):
     PASSIVE = 0
@@ -49,7 +50,27 @@ class MAC50Motor:
 
         # Load the registers from the json file in resources
         with importlib.resources.open_text("py_mac", "registers.json") as file:
-            self.registers = json.load(file)
+            raw_dict = json.load(file)
+        # Generate an enum linking the register names to their addresses
+        registers = {}
+        for name, value in raw_dict.items():
+            registers[name] = value["nb"]
+        self.Register = Enum("Register", registers)
+        # Generate a dictionary linking the values of the enum to the registers properties
+        self.registers = {}
+        for name, value in raw_dict.items():
+            register = self.Register(value["nb"])
+            reg_data = {
+                "addr":        value["nb"],
+                "name":        name,
+                "size":        value["size"],
+                "MacTalk":     value["MacTalk"],
+                "range":       value["range"],
+                "unit":        value["unit"],
+                "description": value["description"]
+            }
+            # Append the data to the dictionary entry for the register
+            self.registers[register] = [*self.registers[register], reg_data] if register in self.registers else [reg_data]
 
         # Open the serial port
         try:
@@ -137,40 +158,27 @@ class MAC50Motor:
         if response != expected:
             raise ValueError("Invalid response")
 
-    def read_register(self, register: str|int)->bytes:
+    def read_register(self, register: Union[str, int, 'Register'], signed=False)->int:
         """
         Read a register from the motor (high-level function).
         :param register: Name or number of the register
         :return: data returned by the motor, little-endian (least significant byte first), cropped to the size of the register
         """
-        if isinstance(register, str):
-            if register not in self.registers:
-                raise ValueError("Invalid register name")
-        if isinstance(register, int):
-            if register < 0 or register > 255:
-                raise ValueError("Invalid register number")
-            register = [k for k, v in self.registers.items() if v["nb"] == register][0]
+        reg = self.register_from(register)
 
-        return self.read(self.registers[register]["nb"])[0:self.registers[register]["size"]]
+        return int.from_bytes(self.read(reg.value)[0:self.registers[reg][0]["size"]], byteorder="little", signed=signed)
 
-    def write_register(self, register: str|int, data: bytes|int)->None:
+    def write_register(self, register: Union[str, int, 'Register'], data: bytes|int)->None:
         """
         Write a register to the motor (high-level function).
         :param register: Name or number of the register
         :param data: data to be written. If int, it will be converted to bytes to match the size of the register. If bytes, it must have the same size as the register.
         """
-        if isinstance(register, str):
-            if register not in self.registers:
-                raise ValueError("Invalid register name")
-            register = self.registers[register]["nb"]
-        if register < 0 or register > 255:
-            raise ValueError("Invalid register number")
-        
-        register_name = [k for k, v in self.registers.items() if v["nb"] == register][0]
+        reg = self.register_from(register)
 
         if isinstance(data, int):
-            data = data.to_bytes(self.registers[register_name]["size"], byteorder="little")
-        if len(data) != self.registers[register_name]["size"]:
+            data = data.to_bytes(self.registers[reg][0]["size"], byteorder="little")
+        elif len(data) != self.registers[reg][0]["size"]:
             raise ValueError("Invalid data size")
 
         self.write(register, data)
@@ -181,7 +189,7 @@ class MAC50Motor:
         :return: current operating mode
         """
         with self.status_lock:
-            mode = OperatingMode(int.from_bytes(self.read_register("MODE_REG"), byteorder="little"))
+            mode = OperatingMode(self.read_register(self.Register.MODE_REG))
 
             # update the object to match the motor
             self.status["operating mode"] = mode
@@ -212,7 +220,7 @@ class MAC50Motor:
                     if position < self.config["min position"] or position > self.config["max position"]:
                         raise ValueError("Position out of bounds")
 
-                self.write_register("MODE_REG", mode.value)
+                self.write_register(self.Register.MODE_REG, mode.value)
                 self.status["operating mode"] = mode
 
     def get_position(self)->int:
@@ -221,7 +229,7 @@ class MAC50Motor:
         :return: current position
         """
         with self.status_lock:
-            pos = int.from_bytes(self.read_register("P_IST"), byteorder="little", signed=True)
+            pos = self.read_register(self.Register.P_IST, signed=True)
             self.status["actual position"] = pos
         return pos
 
@@ -237,7 +245,7 @@ class MAC50Motor:
                 raise ValueError("Motor must be in position mode")
 
             with self.status_lock:
-                self.write_register("P_SOLL", position)
+                self.write_register(self.Register.P_SOLL, position)
                 self.status["target position"] = position
 
     def refresh_config(self)->None:
@@ -246,27 +254,27 @@ class MAC50Motor:
         """
         with self.config_lock:
             self.config = {
-                "max velocity": int.from_bytes(self.read_register("V_SOLL"), byteorder="little"),
-                "max acceleration": int.from_bytes(self.read_register("A_SOLL"), byteorder="little"),
-                "max_torque": int.from_bytes(self.read_register("T_SOLL"), byteorder="little"),
-                "gear ratio nomitor": int.from_bytes(self.read_register("GEARF1"), byteorder="little"),
-                "gear ratio denominator": int.from_bytes(self.read_register("GEARF2"), byteorder="little"),
-                "max winding energy": int.from_bytes(self.read_register("I2TLIM"), byteorder="little"),
-                "max dumped energy": int.from_bytes(self.read_register("UITLIM"), byteorder="little"),
-                "max regulation error": int.from_bytes(self.read_register("FLWERRMAX"), byteorder="little"),
-                "max movement error": int.from_bytes(self.read_register("FNCERRMAX"), byteorder="little"),
-                "min position": int.from_bytes(self.read_register("MIN_P_IST"), byteorder="little", signed=True),
-                "max position": int.from_bytes(self.read_register("MAX_P_IST"), byteorder="little", signed=True),
-                "emergency deceleration": int.from_bytes(self.read_register("ACC_EMERG"), byteorder="little"),
-                "starting mode": OperatingMode(int.from_bytes(self.read_register("STARTMODE"), byteorder="little")),
-                "home position": int.from_bytes(self.read_register("P_HOME"), byteorder="little", signed=True),
-                "homing velocity": int.from_bytes(self.read_register("V_HOME"), byteorder="little"),
-                "homing mode": int.from_bytes(self.read_register("HOMEMODE"), byteorder="little"),
-                "min supply voltage": int.from_bytes(self.read_register("MIN_U_SUP"), byteorder="little"),
-                "motor type": int.from_bytes(self.read_register("MOTORTYPE"), byteorder="little"),
-                "serial number": int.from_bytes(self.read_register("SERIALNUMBER"), byteorder="little"),
-                "address": int.from_bytes(self.read_register("MYADDR"), byteorder="little"),
-                "hardware version": int.from_bytes(self.read_register("HWVERSION"), byteorder="little"),
+                "max velocity":                self.read_register(self.Register.V_SOLL),
+                "max acceleration":            self.read_register(self.Register.A_SOLL),
+                "max_torque":                  self.read_register(self.Register.T_SOLL),
+                "gear ratio nomitor":          self.read_register(self.Register.GEARF1),
+                "gear ratio denominator":      self.read_register(self.Register.GEARF2),
+                "max winding energy":          self.read_register(self.Register.I2TLIM),
+                "max dumped energy":           self.read_register(self.Register.UITLIM),
+                "max regulation error":        self.read_register(self.Register.FLWERRMAX),
+                "max movement error":          self.read_register(self.Register.FNCERRMAX),
+                "min position":                self.read_register(self.Register.MIN_P_IST, signed=True),
+                "max position":                self.read_register(self.Register.MAX_P_IST, signed=True),
+                "emergency deceleration":      self.read_register(self.Register.ACC_EMERG),
+                "starting mode": OperatingMode(self.read_register(self.Register.STARTMODE)),
+                "home position":               self.read_register(self.Register.P_HOME, signed=True),
+                "homing velocity":             self.read_register(self.Register.V_HOME),
+                "homing mode":                 self.read_register(self.Register.HOMEMODE),
+                "min supply voltage":          self.read_register(self.Register.MIN_U_SUP),
+                "motor type":                  self.read_register(self.Register.MOTORTYPE),
+                "serial number":               self.read_register(self.Register.SERIALNUMBER),
+                "address":                     self.read_register(self.Register.MYADDR),
+                "hardware version":            self.read_register(self.Register.HWVERSION),
             }
 
     def refresh_status(self)->None:
@@ -275,16 +283,35 @@ class MAC50Motor:
         """
         with self.status_lock:
             self.status = {
-                "operating mode": OperatingMode(int.from_bytes(self.read_register("MODE_REG"), byteorder="little")),
-                "target position": int.from_bytes(self.read_register("P_SOLL"), byteorder="little"),
-                "actual position": int.from_bytes(self.read_register("P_IST"), byteorder="little", signed=True),
-                "actual velocity": int.from_bytes(self.read_register("V_IST"), byteorder="little", signed=True),
-                "load factor": int.from_bytes(self.read_register("KVOUT"), byteorder="little"),
-                "winding energy": int.from_bytes(self.read_register("I2T"), byteorder="little"),
-                "dumped energy": int.from_bytes(self.read_register("UIT"), byteorder="little"),
-                "regulation error": int.from_bytes(self.read_register("FLWERR"), byteorder="little"),
-                "movement error": int.from_bytes(self.read_register("FNCERR"), byteorder="little"),
-                "error": int.from_bytes(self.read_register("ERR_STAT"), byteorder="little"),
-                "control": int.from_bytes(self.read_register("CNTRL_BITS"), byteorder="little"),
-                "supply voltage": int.from_bytes(self.read_register("U_SUPPLY"), byteorder="little"),
+                "operating mode": OperatingMode(self.read_register(self.Register.MODE_REG)),
+                "target position":  self.read_register(self.Register.P_SOLL, signed=True),
+                "actual position":  self.read_register(self.Register.P_IST, signed=True),
+                "actual velocity":  self.read_register(self.Register.V_IST, signed=True),
+                "load factor":      self.read_register(self.Register.KVOUT),
+                "winding energy":   self.read_register(self.Register.I2T),
+                "dumped energy":    self.read_register(self.Register.UIT),
+                "regulation error": self.read_register(self.Register.FLWERR, signed=True),
+                "movement error":   self.read_register(self.Register.FNCERR, signed=True),
+                "error":            self.read_register(self.Register.ERR_STAT),
+                "control":          self.read_register(self.Register.CNTRL_BITS),
+                "supply voltage":   self.read_register(self.Register.U_SUPPLY),
             }
+
+    def register_from(self, register: Union[str, int, 'Register'])->'Register':
+        """
+        Get the Register object corresponding to the given register.
+        :param register: Name or number of the register
+        :return: Register object
+        """
+        if isinstance(register, self.Register):
+            return register
+        if isinstance(register, int):
+            return self.Register(register)
+        if isinstance(register, str):
+            # search `self.registers` for the register with the given name
+            for k, v in self.registers.items():
+                for reg_data in v:
+                    if reg_data["name"] == register:
+                        return k
+            raise ValueError("Invalid register")
+        raise ValueError("Invalid register")

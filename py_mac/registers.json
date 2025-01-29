@@ -11,6 +11,7 @@
         "nb": 2,
         "size": 2,
         "MacTalk": "Startup mode / Change actual mode",
+        "range": null,
         "unit": null,
         "description": "The actual operating mode of the drive. In general, the motor will either be passive, attempt to reach a certain position, attempt to maintain a constant velocity or attempt to produce a constant torque. The various modes define the main type of operation as well as what determines the setpoint for that operation. The special cases 256..258 are used to perform a few special operations on the entire set of registers.\nSupported values are:\n0   : Passive mode. The axis is not controlled by the drive, and can easily be moved by hand or external mechanics.\n1   : Velocity mode. The drive will attempt to run the motor at a constant velocity selected by Reg5, V_SOLL, without violating the maximum torque or acceleration.\n2   : Position mode. The drive will at all times attempt to move the actual motor position to the position selected by Reg3, P_SOLL, without violating the maximum velocity, torque or acceleration.\n3   : Gear Position mode.\n4   : Analogue torque mode.\n5   : Analogue velocity mode.\n6   : Analog Velocity Gear mode.\n7   : Manual current mode.\n8   : Step response test mode.\n9   : Internal test mode.\n10  : Brake mode.\n11  : Stop mode.\n12  : Torque based zero search mode.\n13  : Forward/only zero search mode.\n14  : Forward+backward zero search mode.\n15  : Safe mode.\n16  : Analogue velocity with deadband mode.\n17  : Velocity limited Analog Torque mode.\n18  : Analogue gear mode.\n19  : Coil mode.\n20  : Analogue bi-position mode.\n21  : Analogue to position mode.\n22  : Internal test mode.\n23  : Internal test mode.\n24  : Gear follow mode.\n25  : IHOME mode.\n256 : \n257 : \n258 : "
     },
@@ -58,7 +59,7 @@
         "nb": 10,
         "size": 4,
         "MacTalk": "Actual position",
-        "range": null,
+        "range": "+/-2147483647",
         "unit": null,
         "description": "The actual motor position measured by the internal encoder. Updated every 1.9ms. Note that this register is maintained incrementally, which means that the user can update it to offset the working range. When updating when the drive is not in Passive mode, P_IST and P_SOLL should be updated together in an atomic operation, using Reg163, P_NEW, or other special measures. Also note that the firmware will change this register after a zero search operation has completed."
     },
@@ -66,7 +67,7 @@
         "nb": 12,
         "size": 2,
         "MacTalk": null,
-        "range": null,
+        "range": "+/-32767",
         "unit": "Counts/Sample",
         "description": "The actual velocity of the drive."
     },
@@ -130,7 +131,7 @@
         "nb": 20,
         "size": 4,
         "MacTalk": null,
-        "range": null,
+        "range": "+/-67E6",
         "unit": null,
         "description": "A measure of how far the drive is from its ideal regulation goal. This value is calculated differently in the various modes, and can mean things like pulses from theoretical position or difference in actual velo city to V_SOLL. Contact JVL for more detailed information for specific modes."
     },
@@ -138,7 +139,7 @@
         "nb": 22,
         "size": 4,
         "MacTalk": null,
-        "range": null,
+        "range": "0 ... 67E6",
         "unit": null,
         "description": "When Reg20, FLWERR, exceeds this limit, an error bit is set in Reg35, ERR_STAT, and the motor will stop if Reg22 is non-zero. Usually this value is set experimentally to detect situations where a movement is blocked or fails."
     },
@@ -146,7 +147,7 @@
         "nb": 24,
         "size": 4,
         "MacTalk": null,
-        "range": null,
+        "range": "+/-134217727",
         "unit": null,
         "description": "Shows how much the motor is behind the ideal movement; precise operation depends on mode. When this accumulated value exceeds Reg26, FNCERRMAX, the FNC_ERR bit is set in Reg35, ERR_STAT and the motor will stop."
     },
@@ -154,7 +155,7 @@
         "nb": 26,
         "size": 4,
         "MacTalk": null,
-        "range": null,
+        "range": "0 ... 134217727",
         "unit": null,
         "description": null
     },
@@ -178,7 +179,7 @@
         "nb": 32,
         "size": 2,
         "MacTalk": null,
-        "range": null,
+        "range": "1 ... 1000",
         "unit": null,
         "description": "Maximum acceleration during emergency stop."
     },
@@ -186,7 +187,7 @@
         "nb": 33,
         "size": 2,
         "MacTalk": null,
-        "range": null,
+        "range": "0 ... 32767",
         "unit": null,
         "description": null
     },
@@ -195,7 +196,7 @@
         "size": 2,
         "MacTalk": null,
         "range": null,
-        "unit": null,
+        "unit": "0 ... 32767",
         "description": null
     },
     "ERR_STAT": {
@@ -226,7 +227,7 @@
         "nb": 38,
         "size": 4,
         "MacTalk": null,
-        "range": null,
+        "range": "+/-67E6",
         "unit": null,
         "description": null
     },
@@ -242,7 +243,7 @@
         "nb": 41,
         "size": 2,
         "MacTalk": null,
-        "range": null,
+        "range": "-800 ... 800",
         "unit": null,
         "description": "Negative => home on falling edge of AN_INP"
     },
@@ -258,7 +259,7 @@
         "nb": 43,
         "size": 2,
         "MacTalk": null,
-        "range": null,
+        "range": "0 ... 8",
         "unit": null,
         "description": null
     },
@@ -266,7 +267,7 @@
         "nb": 44,
         "size": 2,
         "MacTalk": null,
-        "range": null,
+        "range": "0 ... 8",
         "unit": null,
         "description": null
     },
@@ -274,7 +275,7 @@
         "nb": 45,
         "size": 2,
         "MacTalk": null,
-        "range": null,
+        "range": "0 ... 4",
         "unit": null,
         "description": null
     },
@@ -282,7 +283,7 @@
         "nb": 46,
         "size": 2,
         "MacTalk": null,
-        "range": null,
+        "range": "0 ... 4",
         "unit": null,
         "description": null
     },
@@ -290,7 +291,7 @@
         "nb": 47,
         "size": 2,
         "MacTalk": null,
-        "range": null,
+        "range": "0 ... 4",
         "unit": null,
         "description": null
     },
@@ -298,7 +299,7 @@
         "nb": 48,
         "size": 2,
         "MacTalk": null,
-        "range": null,
+        "range": "0 ... 4",
         "unit": null,
         "description": null
     },
@@ -314,7 +315,7 @@
         "nb": 49,
         "size": 4,
         "MacTalk": null,
-        "range": null,
+        "range": "+/-67E6",
         "unit": null,
         "description": null
     },
@@ -330,7 +331,7 @@
         "nb": 51,
         "size": 4,
         "MacTalk": null,
-        "range": null,
+        "range": "+/-67E6",
         "unit": null,
         "description": null
     },
@@ -346,7 +347,7 @@
         "nb": 53,
         "size": 4,
         "MacTalk": null,
-        "range": null,
+        "range": "+/-67E6",
         "unit": null,
         "description": null
     },
@@ -362,7 +363,7 @@
         "nb": 55,
         "size": 4,
         "MacTalk": null,
-        "range": null,
+        "range": "+/-67E6",
         "unit": null,
         "description": null
     },
@@ -378,7 +379,7 @@
         "nb": 57,
         "size": 4,
         "MacTalk": null,
-        "range": null,
+        "range": "+/-67E6",
         "unit": null,
         "description": null
     },
@@ -394,7 +395,7 @@
         "nb": 59,
         "size": 4,
         "MacTalk": null,
-        "range": null,
+        "range": "+/-67E6",
         "unit": null,
         "description": "Bit 0, COIL_START_DIR\nBit 1, COIL_POS_CMD\nBit 2, COIL_PWR_CMD\nBit 3, COIL_POS_ACCEPT\nBit 4, COIL_PWR_FLASH"
     },
@@ -410,7 +411,7 @@
         "nb": 61,
         "size": 4,
         "MacTalk": null,
-        "range": null,
+        "range": "+/-67E6",
         "unit": null,
         "description": null
     },
@@ -426,7 +427,7 @@
         "nb": 63,
         "size": 4,
         "MacTalk": null,
-        "range": null,
+        "range": "+/-67E6",
         "unit": null,
         "description": null
     },
