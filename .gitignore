@@ -1,1 +1,10 @@
+# Python
 .venv
+venv
+
+# IDEs
+.idea
+.vscode
+
+# MacOS
+.DS_Store
