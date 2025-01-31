@@ -4,7 +4,7 @@
   <name>py_mac</name>
   <version>0.0.0</version>
   <description>TODO: Package description</description>
-  <maintainer email="robinson.besson@nosseb.fr">athenaide</maintainer>
+  <maintainer email="robinson.besson@nosseb.fr">Athénaïde</maintainer>
   <license>Apache-2.0</license>
 
   <test_depend>ament_copyright</test_depend>

@@ -17,7 +17,7 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='athenaide',
+    maintainer='Athénaïde',
     maintainer_email='robinson.besson@nosseb.fr',
     description='TODO: Package description',
     license='Apache-2.0',
